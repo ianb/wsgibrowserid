@@ -1,16 +1,16 @@
-= WSGI BrowserID
+# WSGI BrowserID
 
 This is a very simple application to handle [browserid](http://browserid.org) logins, specifically to set signed cookies for your BrowserID login.  It is an application and a small Javascript file that lightly wraps the BrowserID library.  You don't need to integrate this into your application, or even have an application written in Python, to use this.  All you have to do is make sure that your Cookie signing algorithm is the same as WSGIBrowserID's signing algorithm.
 
-== Configuration
+## Configuration
 
-Look in `docs/example.wsgi` for an example of how to setup the application.
+Look in docs/example.wsgi for an example of how to setup the application.
 
-The application uses `pycurl`, which you must install.  It has no other prerequesites.  Should be okay with Python 2.5 - 2.7.
+The application uses pycurl, which you must install.  It has no other prerequesites.  Should be okay with Python 2.5 - 2.7.
 
-== Using in your app
+## Using in your app
 
-You must include `https://browserid.org/include.js`, then you can `/wsgibrowserid.js` (under whatever path you mount the application). This will define an object `WSGIBrowserID`.
+You must include `https://browserid.org/include.js`, and also include `/wsgibrowserid.js` (under whatever path you mount the application). This will define an object `WSGIBrowserID`.
 
 There are three provided functions:
 
@@ -23,7 +23,7 @@ There are three provided functions:
 `WSGIBrowserID.loginStatus()`:
   Returns the userid (email address), or null.
 
-== To Do
+## To Do
 
 * More examples of hashing functions, secret getters.
 
