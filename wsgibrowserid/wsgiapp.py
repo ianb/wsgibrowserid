@@ -10,16 +10,23 @@ except ImportError:
 here = os.path.dirname(__file__)
 
 
+class BrowserIDException(Exception):
+    pass
+
+
 class Application(object):
 
+    default_browserid_verifier = 'https://browserid.org/verify?assertion=%(assertion)s&audience=%(audience)s'
+
     def __init__(self, audience=None, hasher=None, secret_getter=None,
-                 cookie_name="auth"):
+                 cookie_name="auth", browserid_verifier=None):
         self.js = {}
         self.audience = audience
         self.hasher = get_hasher(hasher)
         self.secret_getter = get_secret_getter(secret_getter)
         self._secret = None
         self.cookie_name = cookie_name
+        self.browserid_verifier = browserid_verifier or self.default_browserid_verifier
 
     def __call__(self, environ, start_response):
         path_info = environ.get('PATH_INFO', '')
@@ -69,20 +76,27 @@ class Application(object):
         audience = self.audience
         if audience is None:
             audience = environ['HTTP_HOST']
-        url = 'https://browserid.org/verify?assertion=%s&audience=%s' % (
-            urllib.quote(qs['assertion']), urllib.quote(audience))
-        resp = get_url(url)
-        data = json.loads(resp)
-        print data
-        if data.get('audience') != audience:
-            resp_data = {'status': 'failed',
-                         'error': 'Bad audience in response: %r' % data.get('audience')}
+        url = self.browserid_verifier % dict(
+            assertion=urllib.quote(qs['assertion']),
+            audience=urllib.quote(audience))
+        error = False
+        try:
+            resp = get_url(url)
+            data = json.loads(resp)
+            if data['status'] != 'okay':
+                raise BrowserIDException('Status not okay: %r' % data)
+            if data.get('audience') != audience:
+                raise BrowserIDException('Bad audience in response: %r' % data.get('audience'))
+        except BrowserIDException, e:
+            error = True
+            resp_data = dict(status='failed', error=str(e))
         else:
             resp_data = data
         resp_data = json.dumps(resp_data)
         headers = [('Content-Type', 'application/json'),
                    ('Content-Length', str(len(resp_data)))]
-        headers.extend(self.extra_headers(environ, data))
+        if not error:
+            headers.extend(self.extra_headers(environ, data))
         start_response('200 OK', headers)
         return [resp_data]
 
@@ -103,8 +117,14 @@ def get_url(url):
     curl.setopt(pycurl.SSL_VERIFYPEER, 1)
     curl.setopt(pycurl.SSL_VERIFYHOST, 2)
     curl.setopt(pycurl.URL, url)
-    curl.perform()
-    #assert curl.getinfo(pycurl.CURLINFO_RESPONSE_CODE) == 200
+    try:
+        curl.perform()
+    except pycurl.error, e:
+        if e.args[0] == 51:
+            raise BrowserIDException(
+                'The SSL certificate is bad: %s' % e.args[1])
+        raise
+    ## FIXME: check response code?
     return ''.join(x)
 
 

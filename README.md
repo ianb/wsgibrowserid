@@ -40,3 +40,5 @@ There are three provided functions:
 * Write the whole thing in PHP; same concept, another deployment technique.
 
 * Maybe setup an App Engine recipe.
+
+* No good error messages, and many "typical" errors aren't handled gracefully.
