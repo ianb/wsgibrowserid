@@ -16,7 +16,7 @@ class BrowserIDException(Exception):
 
 class Application(object):
 
-    default_browserid_verifier = 'https://browserid.org/verify?assertion=%(assertion)s&audience=%(audience)s'
+    default_browserid_verifier = 'https://browserid.org/verify'
 
     def __init__(self, audience=None, hasher=None, secret_getter=None,
                  cookie_name="auth", browserid_verifier=None):
@@ -38,8 +38,8 @@ class Application(object):
             start_response('404 Not Found', [('Content-type', 'text/plain')])
             return ['Not Found']
 
-    def js_file(self, environ, start_response):
-        base_url = self.base_url(environ)
+    def js_content(self, environ, add_prefix=None):
+        base_url = self.base_url(environ, add_prefix)
         if base_url not in self.js:
             fp = open(os.path.join(here, 'wsgibrowserid.js'))
             try:
@@ -51,12 +51,16 @@ class Application(object):
             c = c.replace('__COOKIE__', self.cookie_name)
             c = c.replace('__DECODE_COOKIE__', self.hasher.decodeCookie)
             self.js[base_url] = c
+        return self.js[base_url]
+
+    def js_file(self, environ, start_response):
+        js = self.js_content(environ)
         ## FIXME: should add cache headers here, content-length, conditional
         ## gets, etc:
         start_response('200 OK', [('Content-Type', 'text/javascript')])
-        return [self.js[base_url]]
+        return [js]
 
-    def base_url(self, environ):
+    def base_url(self, environ, add_prefix=None):
         scheme = environ['wsgi.url_scheme']
         base_url = scheme + '://'
         host = environ.get('HTTP_HOST', environ.get('SERVER_NAME', ''))
@@ -69,6 +73,8 @@ class Application(object):
         elif scheme == 'https' and port and port != '443':
             host += ':' + port
         base_url += host + environ.get('SCRIPT_NAME', '')
+        if add_prefix:
+            base_url += add_prefix
         return base_url
 
     def check(self, environ, start_response):
@@ -76,12 +82,12 @@ class Application(object):
         audience = self.audience
         if audience is None:
             audience = environ['HTTP_HOST']
-        url = self.browserid_verifier % dict(
-            assertion=urllib.quote(qs['assertion']),
-            audience=urllib.quote(audience))
+        data = dict(
+            assertion=qs['assertion'],
+            audience=audience).items()
         error = False
         try:
-            resp = get_url(url)
+            resp = post_url(self.browserid_verifier, data)
             data = json.loads(resp)
             if data['status'] != 'okay':
                 raise BrowserIDException('Status not okay: %r' % data)
@@ -105,11 +111,12 @@ class Application(object):
         secret = self.secret_getter()
         ## FIXME: need a nonce or something too, though hasher could handle it
         ## Also a way to refresh the cookie
-        hash = urllib.quote(self.hasher(email, secret, environ))
+        hash = self.hasher(email, secret, environ)
         return [('Set-Cookie', self.cookie_name + '=' + hash + '; Path=/')]
 
 
-def get_url(url):
+def post_url(url, data):
+    data = urllib.urlencode(data)
     x = []
     curl = pycurl.Curl()
     curl.setopt(pycurl.WRITEFUNCTION, x.append)
@@ -117,8 +124,12 @@ def get_url(url):
     curl.setopt(pycurl.SSL_VERIFYPEER, 1)
     curl.setopt(pycurl.SSL_VERIFYHOST, 2)
     curl.setopt(pycurl.URL, url)
+    curl.setopt(pycurl.POST, 1)
+    curl.setopt(pycurl.POSTFIELDS, data)
+    #curl.setopt(pycurl.VERBOSE, 1)
     try:
         curl.perform()
+        curl.close()
     except pycurl.error, e:
         if e.args[0] == 51:
             raise BrowserIDException(
@@ -139,7 +150,7 @@ def get_hasher(hasher):
 
 def default_hasher(email, secret, environ):
     import hmac
-    return email + ' ' + hmac.new(secret, email).hexdigest()
+    return urllib.quote(email + ' ' + hmac.new(secret, email).hexdigest())
 
 default_hasher.decodeCookie = """\
 function decodeCookie(cookie) {
@@ -184,7 +195,8 @@ class FileSecret(object):
             return self._secret
         if not os.path.exists(self.filename):
             fp = open(self.filename, 'wb')
-            fp.write(generate_secret())
+            secret = generate_secret()
+            fp.write(secret)
             fp.close()
         fp = open(self.filename, 'rb')
         secret = fp.read().strip()

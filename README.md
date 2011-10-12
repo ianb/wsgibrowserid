@@ -1,6 +1,6 @@
 # WSGI BrowserID
 
-This is a very simple application to handle [browserid](http://browserid.org) logins, specifically to set signed cookies for your BrowserID login.  It is an application and a small Javascript file that lightly wraps the BrowserID library.  You don't need to integrate this into your application, or even have an application written in Python, to use this.  All you have to do is make sure that your Cookie signing algorithm is the same as WSGIBrowserID's signing algorithm.
+This is a very simple application to handle [browserid](http://browserid.org) logins, specifically to set signed cookies for your BrowserID login.  It is an application and a small Javascript file that lightly wraps the BrowserID library.  You don't need to integrate this into your application, or even have an application written in Python, to use this.  All you have to do is make sure that your Cookie signing algorithm is the same as WSGIBrowserID's signing algorithm.  And better, you can change WSGIBrowserID's signing to match your existing system.
 
 ## Configuration
 
